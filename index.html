@@ -1,0 +1,58 @@
+<!doctype html>
+<html ng-app="app">
+<head>
+	<meta charset="UTF-8">
+    
+    <link rel="stylesheet" href="styles/bootstrap.css" />
+    <link rel="stylesheet" href="styles/font-awesome.css" />
+    
+    <script src="vendor/jquery.js"></script>
+    <script src="vendor/angular.js"></script>
+    <script src="src/jquery.owncloud.js"></script>
+    <script src="scripts/app.js"></script>
+    
+	<title></title>
+</head>
+<body ng-controller="RootCtrl" style="padding: 10px;">
+    <div class="container">
+        <div class="panel panel-default">
+            <div class="panel-heading">
+                <header class="panel-title" ng-click="getFiles()">File List</header>
+            </div>
+            
+            <div class="panel-body">
+                <div class="row">
+                	<div class="col-sm-6">
+                        <ul class="list-group" ng-if="files.length">
+                            <li class="list-group-item" ng-if="!data.isRoot">
+                                <a href="#" ng-click="getFiles('..')">..</a>
+                            </li>
+                            
+                            <li class="list-group-item" ng-repeat="file in files">
+                                <div class="radio">
+                                    <input id="file-{{file.id}}" name="selected" type="radio" ng-model="data.selected" ng-value="file" />
+                                    
+                                    <label for="file-{{file.id}}" ng-bind="file.name" ng-if="file.dir" ng-click="getFiles(file.name)"></label>
+                                    <label for="file-{{file.id}}" ng-bind="file.name" ng-if="!file.dir"></label>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                    
+                	<div class="col-sm-6" ng-if="data.selected">
+                        <h4>Selected File</h4>
+                        
+                        <div>
+                            <button class="btn" ng-click="share()">Share <span ng-bind="data.selected.name"></span></button>
+                        </div>
+                        
+                        <h4 ng-if="data.shared">Shared URL</h4>
+                        
+                        <a ng-href="{{data.shared}}" ng-bind="data.shared"></a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
