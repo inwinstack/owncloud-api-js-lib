@@ -7,6 +7,7 @@ angular.module('app', [])
 })
 
 .run(['owncloud', function (owncloud) {
+    owncloud.fn.setup('http://localhost/owncloud/index.php');
     owncloud.fn.login('admin', 'admin');
 }])
 
@@ -21,15 +22,39 @@ angular.module('app', [])
                 return file;
             });
             $scope.data.isRoot = owncloud.value.isRoot;
-            
+            $scope.data.selected = [];
+
             $scope.$digest();
         });
     };
     
+    $scope.toogle = function (item) {
+        var list = $scope.data.selected.map(function (data) {
+            return data.name;
+        });
+
+        var idx = list.indexOf(item.name);
+        if (idx > -1) $scope.data.selected.splice(idx, 1);
+        else $scope.data.selected.push(item);
+    }
+
+    $scope.exists = function (item) {
+        var list = $scope.data.selected.map(function (data) {
+            return data.name;
+        });
+
+        return list.indexOf(item.name) > -1;
+    }
+
     $scope.share = function () {
-        owncloud.fn.share($scope.data.selected).done(function (data) {
-            $scope.data.shared = data;
-            
+        $scope.date = '02-08-2016';
+        $scope.password = 1234;
+
+        owncloud.fn.share($scope.data.selected, $scope.date, $scope.password).done(function (data) {
+            $scope.data.shared = data.link;
+            $scope.data.email = data.email;
+            $scope.data.selected = [];
+
             $scope.$digest();
         });
     };
@@ -50,7 +75,7 @@ angular.module('app', [])
     $scope.reset = function () {
         $scope.data = {};
         $scope.data.isRoot = true;
-        $scope.data.selected = null;
+        $scope.data.selected = [];
     };
     
     $scope.reset();

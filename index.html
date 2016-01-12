@@ -28,10 +28,9 @@
                                 <a href="#" ng-click="getFiles('..')">..</a>
                             </li>
                             
-                            <li class="list-group-item" ng-repeat="file in files">
-                                <div class="radio">
-                                    <input id="file-{{file.id}}" name="selected" type="radio" ng-model="data.selected" ng-value="file" />
-                                    
+                            <li class="list-group-item" ng-repeat="file in files" >
+                                <div class="checkbox">
+                                    <input id="file-{{file.id}}" type="checkbox" ng-checked="exists(file)" ng-click="toogle(file)"/>
                                     <label for="file-{{file.id}}" ng-bind="file.name" ng-if="file.dir" ng-click="getFiles(file.name)"></label>
                                     <label for="file-{{file.id}}" ng-bind="file.name" ng-if="!file.dir"></label>
                                 </div>
@@ -39,16 +38,20 @@
                         </ul>
                     </div>
                     
-                	<div class="col-sm-6" ng-if="data.selected">
+                	<div class="col-sm-6" ng-if="data.selected.length || data.shared">
                         <h4>Selected File</h4>
                         
                         <div>
-                            <button class="btn" ng-click="share()">Share <span ng-bind="data.selected.name"></span></button>
+                            <button class="btn" ng-click="share()">Share <span ng-bind="data.selected[0].name"></span></button>
                         </div>
-                        
+
+                        <h4 ng-if="data.email">User Email</h4>
+                        <span ng-bind="data.email" ng-if="data.email"></span>
+
                         <h4 ng-if="data.shared">Shared URL</h4>
-                        
-                        <a ng-href="{{data.shared}}" ng-bind="data.shared"></a>
+                        <li ng-repeat="share_url in data.shared">
+                            <a ng-href="{{share_url}}" ng-bind="share_url"></a>
+                        </li>
                     </div>
                 </div>
             </div>
