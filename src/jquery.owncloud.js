@@ -1,70 +1,120 @@
 // TODO License Announcement
 
-(function (window, document) {
+(function (window, document, undefined) {
 'use strict';
 
 var owncloud = window.owncloud || (window.owncloud = {});
 
-var conifg = {
-    URL_ROOT: 'http://localhost/inwin/owncloud/8.0.4/index.php' // TODO 這個參數需要由開發者指定
-};
-
 var API_FILES = '/apps/files/ajax/list.php';
 var API_SHARE = '/core/ajax/share.php';
-var API_SHARED = '/s/';
+var API_MULTI_SHARE = '/apps/mail_external/shareLinks';
+var API_SHARED_URI = '/s/';
 var API_DOWNLOAD = '/apps/files/ajax/download.php?';
 
+var PERMISSION_ALL = 31;
+var PERMISSION_CREATE = 4;
+var PERMISSION_DELETE = 8;
+var PERMISSION_READ = 1;
+var PERMISSION_SHARE = 16;
+var PERMISSION_UPDATE = 2;
+
+var conifg = {
+    url_root: null,
+    async: true
+};
+
+var requesttoken = null;
+
 owncloud.value = {};
-// owncloud.value.requesttoken = null;
 owncloud.value.isRoot = true;
 owncloud.value.currentPath = '/';
 
 owncloud.fn = {};
+owncloud.fn.setup = setup;
 owncloud.fn.login = login;
 owncloud.fn.files = files;
 owncloud.fn.share = share;
 owncloud.fn.getDownloadUrl = getDownloadUrl;
 
-// TODO 可以多個檔案同時建立連結
-// TODO 要可以設定密碼及到期日
-function share (file) {
+// TODO All support type of object input
+// TODO 可以多個檔案同時建立連結 (verify)
+// TODO 要可以設定密碼及到期日 (verify)
+
+function share (files, expiration, password) {
     var df = $.Deferred();
     
-    shareWithLink(file).done(function (data) {
-        df.resolve(conifg.URL_ROOT + API_SHARED + data.data.token);
+    var files = files.map(function (file) {
+        var permissions = file.permissions;
+
+        if (file.type === 'file') {
+           permissions = permissions & ~PERMISSION_DELETE;
+        }
+
+        if (file.type === 'dir') { 
+            file.type = 'folder';
+        }
+
+        return {
+            itemType: file.type,
+            itemSource: file.id,
+            itemSourceName: file.name,
+            permissions: permissions
+        };
+    });
+    
+    multiLinkShares({
+        files: files,
+        expiration: expiration,
+        password: password,
+        passwordChanged: password !== undefined
+    }).done(function (data, textStatus, jqXHR) {
+        var shares = Object.keys(data).map(function (name) {
+            return {
+                name: name,
+                url: conifg.url_root + API_SHARED_URI + data[name]
+            };
+        });
+
+        df.resolve(share, textStatus, jqXHR);
     });
     
     return df.promise();
 }
 
 // TODO 確認檔案物件皆有可提供開發者使用的變數
-function files (dir) {
+function files (path, async) {
     var df = $.Deferred();
+    var options = typeof path === 'object' ? path : false;
+    var dir = options ? options.path : path;
+    var async = options ? options.async : async;
     
-    filelist(verifyPath(dir)).done(function (data) {
+    filelist({
+        dir: verifyPath(dir),
+        async : async
+    }).done(function (data, textStatus, jqXHR) {
         owncloud.value.currentPath = data.data.directory;
         owncloud.value.isRoot = data.data.directory === '/';
         
-        df.resolve(data.data);
+        df.resolve(data.data, textStatus, jqXHR);
     });
     
     return df.promise();
 }
 
-function verifyPath (dir) {
-    if (!dir) {
+function verifyPath (path) {
+    if (!path) {
         return owncloud.value.currentPath;
     }
     
-    if (dir.indexOf('/') === 0) {
-        return dir;
+    if (path.indexOf('/') === 0) {
+        return path;
     }
     
-    if (dir === '..') {
+    if (path === '..') {
         return getParentPath();
     }
     
-    return owncloud.value.isRoot ? '/' + dir : owncloud.value.currentPath + '/' + dir;
+    return owncloud.value.isRoot ? '/' + path : owncloud.value.currentPath + '/' + path;
 }
 
 function getParentPath () {
@@ -76,7 +126,7 @@ function getParentPath () {
 }
 
 function getDownloadUrl (file, path) {
-    return conifg.URL_ROOT + API_DOWNLOAD + $.param({
+    return conifg.url_root + API_DOWNLOAD + $.param({
         files: file,
         dir: path || owncloud.value.currentPath
     });
@@ -86,8 +136,11 @@ function login (username, password) {
     var df = $.Deferred();
     
     prepare().done(function () {
-        signin(username, password).done(function () {
-            df.resolve();
+        signin({
+            username: username,
+            password: password
+        }).done(function (data, textStatus, jqXHR) {
+            jqXHR.status === 302 && df.resolve({status: 'success'}, textStatus, jqXHR);
         });
     });
     
@@ -105,7 +158,8 @@ function prepare () {
         var container = $('<div>').append(root);
         var data = container.find('head').data();
         
-        owncloud.value.requesttoken = data.requesttoken;
+        requesttoken = data.requesttoken;
+        owncloud.value.currentUser = data.user;
         
         df.resolve();
     });
@@ -113,54 +167,91 @@ function prepare () {
     return df.promise();
 };
 
-function shareWithLink (file) {
+function multiLinkShares (options) {
     return $.ajax({
-        url: conifg.URL_ROOT + API_SHARE,
+        async: options.async !== undefined ? options.async : conifg.async,
+        url: conifg.url_root + API_MULTI_SHARE,
         method: 'POST',
         headers: {
-            requesttoken: owncloud.value.requesttoken,
+            requesttoken: requesttoken,
         },
         data: {
-            action: 'share',
-            itemType: 'file',
-            itemSource: file.id,
-            shareType: 3,
-            shareWith: null,
-            permissions: 1,
-            itemSourceName: file.name,
-            expirationDate: null
+            data: options.files,
+            expirationDate: options.expiration,
+            shareWith: {
+                password: options.password,
+                passwordChanged: options.passwordChanged
+            }
         }
     });
 }
 
-function filelist (path) {
+function shareWithLink (file, options) {
     return $.ajax({
-        url: conifg.URL_ROOT + API_FILES,
+        async: conifg.async,
+        url: conifg.url_root + API_SHARE,
+        method: 'POST',
+        headers: {
+            requesttoken: requesttoken,
+        },
         data: {
-            dir: path,
+            action: 'share',
+            itemType: file.type,
+            itemSource: file.id,
+            itemSourceName: file.name,
+            shareType: 3,
+            shareWith: options.password,
+            permissions: options.permissions,
+            expirationDate: options.expiration
+        }
+    });
+}
+
+function filelist (options) {
+    return $.ajax({
+        async: options.async !== undefined ? options.async : conifg.async,
+        url: conifg.url_root + API_FILES,
+        data: {
+            dir: options.dir,
             sort: 'name',
             sortdirection: 'asc'
         }
     });
 }
 
-// TODO signin 不應該使用帳密登入應該更換為 SSO 的 TOKEN
-function signin (username, password) {
+// TODO 不應該使用帳密登入應該更換為 SSO 的 TOKEN
+function signin (options) {
     return $.ajax({
-        url: conifg.URL_ROOT,
+        url: conifg.url_root,
         method: 'POST',
         data: {
-            requesttoken: owncloud.value.requesttoken,
-            user: username,
-            password: password
+            requesttoken: requesttoken,
+            user: options.username,
+            password: options.password
         }
     });
 }
 
 function init () {
     return $.ajax({
-        url: conifg.URL_ROOT
+        url: conifg.url_root
     });
 };
+
+function setup (options) {
+    if (typeof options.url_root !== 'string') {
+        throw new Error('The ownCloud URL should be assigned with url_root!');
+    }
+    
+    conifg.url_root = options.url_root;
+    
+    if (typeof options.async === 'boolean') {
+        conifg.async = options.async;
+    }
+}
+
+function exculdeUndefined (data) {
+     return data != undefined;
+}
 
 })(window, document);
